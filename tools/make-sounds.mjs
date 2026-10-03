@@ -1,10 +1,10 @@
-// Synthesizes PachinCode's WAV clips into ../sounds. Run: node tools/make-sounds.mjs
+// Synthesizes PachinCode's WAV clips into ../assets/sounds. Run: node tools/make-sounds.mjs
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const RATE = 22050
-const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'sounds')
+const out = join(dirname(fileURLToPath(import.meta.url)), '..', 'assets', 'sounds')
 mkdirSync(out, { recursive: true })
 
 let seed = 7

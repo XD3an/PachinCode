@@ -2,8 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { GlowProps, Handle, Hud, Machine, PadInput, Tally } from '../types'
-import { buildGeometry, isBusy, messageOf, newGame, paint, step, TICK_MS, wake, windDown } from './machine'
-import type { Game } from './machine'
+import { buildGeometry, isBusy, messageOf, newGame, paint, step, TICK_MS, wake, windDown } from './game'
+import type { Game } from './game'
 
 const PANE = 'pachincode'
 const BASE_BALLS = 30
@@ -107,11 +107,11 @@ async function runPlayer($: EngineInterface) {
         '-ExecutionPolicy',
         'Bypass',
         '-File',
-        `${$.plugin.root}/sound/player.ps1`,
+        `${$.plugin.root}/assets/player.ps1`,
         '-Queue',
         sound.queuePath,
         '-Sounds',
-        `${$.plugin.root}/sounds`,
+        `${$.plugin.root}/assets/sounds`,
       ],
     })
     for await (const piece of player) {
@@ -128,7 +128,7 @@ function playSound($: EngineInterface, name: string) {
   if (now - (sound.lastAt.get(name) ?? 0) < (MIN_GAP_MS[name] ?? 0)) return
   sound.lastAt.set(name, now)
   if (sound.isWindows) sound.pending.push(name)
-  else void $.audio.play({ asset: `sounds/${name}.wav` }, { gain: name === 'jackpot' || name === 'kakuhen' || name === 'reach' || name === 'boot' ? 0.25 : 0.3 }).catch(() => undefined)
+  else void $.audio.play({ asset: `assets/sounds/${name}.wav` }, { gain: name === 'jackpot' || name === 'kakuhen' || name === 'reach' || name === 'boot' ? 0.25 : 0.3 }).catch(() => undefined)
 }
 
 /** Hands what was played since the last flush to the player, in one write. */
@@ -446,7 +446,7 @@ export const register: Register = on => {
           <Raster key="screen" columns={cols} rows={rows} cells={paint(game)} />
           {/* An invisible layer over the machine takes the mouse and Space. */}
           <Box position="absolute" top={0} left={0}>
-            <Client key="pad" module="./pad.tsx" props={{ columns: cols, rows }} width={cols} height={rows} />
+            <Client key="pad" module="./surfaces/pad.tsx" props={{ columns: cols, rows }} width={cols} height={rows} />
           </Box>
         </Box>
         <Text wrap="truncate">
@@ -504,6 +504,6 @@ export const register: Register = on => {
     }
     const { Client } = $.ui.resolve(e)
 
-    return <Client key="glow" module="./glow.tsx" props={glow} width={e.props.bodyColumns} height={1} />
+    return <Client key="glow" module="./surfaces/glow.tsx" props={glow} width={e.props.bodyColumns} height={1} />
   })
 }

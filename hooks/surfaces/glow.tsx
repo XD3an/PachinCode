@@ -1,6 +1,6 @@
 import type { ClientModule } from 'claude-code'
 
-import type { GlowProps } from '../types'
+import type { GlowProps } from '../../types'
 
 type GlowState = { frame: number }
 

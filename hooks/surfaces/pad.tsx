@@ -1,6 +1,6 @@
 import type { ClientModule } from 'claude-code'
 
-import type { PadInput } from '../types'
+import type { PadInput } from '../../types'
 
 type PadProps = { columns: number; rows: number }
 

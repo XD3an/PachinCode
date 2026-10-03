@@ -1,10 +1,10 @@
 // Renders machine frames to PNG for a look without a terminal. Bundle the machine first:
-//   npx esbuild hooks/machine.ts --bundle --format=esm --outfile=<dir>/machine.mjs
+//   npx esbuild hooks/game/index.ts --bundle --format=esm --outfile=<dir>/machine.mjs
 //   MACHINE=file:///<dir>/machine.mjs node tools/preview.mjs <out-dir> [cols] [rows]
 import { writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 import { join } from 'node:path'
-const m = await import(process.env.MACHINE ?? '../hooks/machine.ts')
+const m = await import(process.env.MACHINE ?? '../hooks/game/index.ts')
 
 const out = process.argv[2] ?? '.'
 const cols = Number(process.argv[3] ?? 70)
@@ -66,7 +66,8 @@ game.input = { power: 45, isFiring: true }
 for (let i = 0; i < 70; i++) m.step(game)
 shot(game, 'play.png')
 game.input.isFiring = false
-game.odds = 1
+// A held ball already drawn to hit, so the next spin is a reach that pays.
+game.queue = [{ isHit: true, isReach: true, prize: 'premium', lamp: 'gold' }]
 game.holds = 1
 for (let i = 0; i < 1; i++) m.step(game)
 for (let i = 0; i < 125; i++) m.step(game)

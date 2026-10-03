@@ -112,7 +112,7 @@ On Windows the running player keeps the loaded WAV files open. Close the machine
 ### Previewing without a terminal
 
 ```bash
-npx esbuild hooks/machine.ts --bundle --format=esm --outfile=/tmp/machine.mjs
+npx esbuild hooks/game/index.ts --bundle --format=esm --outfile=/tmp/machine.mjs
 MACHINE=file:///tmp/machine.mjs node tools/preview.mjs ./out 70 36
 ```
 
