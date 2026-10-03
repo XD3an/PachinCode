@@ -1,0 +1,17 @@
+{
+  "name": "pachincode",
+  "version": "0.1.0",
+  "description": "A pachinko machine that fills up with balls while Claude writes: jackpots, right strike, kakuhen.",
+  "author": {
+    "name": "Dean",
+    "url": "https://github.com/XD3an"
+  },
+  "license": "MIT",
+  "keywords": [
+    "pachinko",
+    "game",
+    "mod",
+    "claude-code"
+  ],
+  "types": "./types/index.d.ts"
+}

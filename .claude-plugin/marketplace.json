@@ -1,0 +1,19 @@
+{
+  "name": "pachincode",
+  "description": "A pachinko machine for Claude Code.",
+  "owner": {
+    "name": "Dean",
+    "url": "https://github.com/XD3an"
+  },
+  "plugins": [
+    {
+      "name": "pachincode",
+      "source": "./",
+      "description": "A pachinko machine that fills up with balls while Claude writes: jackpots, right strike, kakuhen.",
+      "author": {
+        "name": "Dean",
+        "url": "https://github.com/XD3an"
+      }
+    }
+  ]
+}
