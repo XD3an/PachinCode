@@ -1,6 +1,6 @@
 {
   "name": "pachincode",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A pachinko machine that fills up with balls while Claude writes: jackpots, right strike, kakuhen.",
   "author": {
     "name": "Dean",
