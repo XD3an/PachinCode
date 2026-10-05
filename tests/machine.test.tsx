@@ -101,6 +101,23 @@ describe('PachinCode', () => {
     await ui.unmount()
   })
 
+  test('the desktop draws the machine as an image and the buttons fire', async ($, on) => {
+    const clock = await boot($, on)
+    await submit($, 'q')
+    const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+    const screen = (await ui.find({ type: 'Svg' } as never)) as { props?: { source?: string } } | undefined
+    expect(screen).toBeDefined()
+    expect(screen?.props?.source ?? '').toMatch(/^<svg[^>]*>.*data:image\/png;base64,/)
+    expect(await ui.find({ type: 'Raster' } as never)).toBeUndefined()
+
+    await ui.press({ key: 'auto' })
+    await clock.advance(1500)
+    await ui.redraw()
+    const left = Number((await strip(ui)).match(/玉 (\d+)/)?.[1])
+    expect(left).toBeLessThan(30)
+    await ui.unmount()
+  })
+
   test('/pachinko mute and stats answer', async ($, on) => {
     await boot($, on)
     expect((await $.command.run({ command: 'pachinko', args: 'mute' } as never)).text).toMatch(/靜音/)

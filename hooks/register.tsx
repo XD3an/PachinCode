@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { GlowProps, Handle, Hud, Machine, PadInput, Tally } from '../types'
-import { buildGeometry, isBusy, messageOf, newGame, paint, step, TICK_MS, wake, windDown } from './game'
+import { buildGeometry, isBusy, messageOf, newGame, paint, paintSvg, step, TICK_MS, wake, windDown } from './game'
 import type { Game } from './game'
 
 const PANE = 'pachincode'
@@ -12,6 +12,11 @@ const POINTS_PER_GATE_BALL = 15
 const ODDS = 1 / 99
 const KAKUHEN_FACTOR = 10
 const GOLD_LIMIT = 400
+/** The machine's size on the desktop, which has no terminal width to follow. */
+const DESKTOP_COLS = 72
+const DESKTOP_ROWS = 44
+/** The desktop draws an image per frame: every third tick, 10 a second. */
+const DESKTOP_EVERY = 3
 
 const machine = atom({ plugin: 'pachincode', key: 'machine' } as const, {
   granted: 0,
@@ -25,6 +30,8 @@ const machine = atom({ plugin: 'pachincode', key: 'machine' } as const, {
 const hud = atom({ plugin: 'pachincode', key: 'hud' } as const, { holds: 0, message: '' } as Hud)
 const handle = atom({ plugin: 'pachincode', key: 'handle' } as const, { power: 30, isAuto: false } as Handle)
 const gold = atom({ plugin: 'pachincode', key: 'gold' } as const, [] as string[])
+/** Bumped to redraw the desktop's machine: the desktop has no Raster to blit. */
+const frame = atom({ plugin: 'pachincode', key: 'frame' } as const, 0)
 
 type Saved = { points: number; isKakuhenNext: boolean; isEnabled: boolean; isMuted: boolean; gold: string[] }
 
@@ -67,6 +74,8 @@ const live = {
   pad: { id: 0, isPointerDown: false, space: 0, steps: 0, preset: 0, presetPower: 30 } as PadInput,
   /** Ticks since the pane was last seen, to look for it again now and then. */
   probe: 0,
+  /** Ticks since the desktop last drew the pane. */
+  desktopIdle: Number.POSITIVE_INFINITY,
   carry: 0,
   synced: { fired: 0, gate: 0, jackpots: 0, isFever: false } as Tally,
   syncedHud: { holds: 0, message: '' } as Hud,
@@ -235,9 +244,13 @@ async function onPad($: EngineInterface, input: PadInput) {
 
 async function tick($: EngineInterface) {
   if (game.geometry === null) return
-  if (!live.isMounted) {
-    // Lost the pane (a reload, a close): look for it about once a second.
+  live.desktopIdle += 1
+  const onDesktop = live.desktopIdle < 2 * DESKTOP_EVERY + 30
+  if (!live.isMounted && !onDesktop) {
+    // Lost the pane (a reload, a close): look for it about once a second. A desktop pane
+    // that is open redraws on the bump and so is seen again.
     if (++live.probe % 30 !== 0) return
+    await update($, frame, n => n + 1)
     const found = await $.ui.blit({ requestId: PANE, key: 'screen', cells: paint(game) })
     if (found.deny !== undefined) return
     live.isMounted = true
@@ -252,10 +265,11 @@ async function tick($: EngineInterface) {
   await flushSounds($)
   await sync($)
   // Always moving, as a machine in a hall is: full rate in play, half rate when idle.
-  if (wasBusy || isBusy(game) || game.frame % 2 === 0) {
+  if (live.isMounted && (wasBusy || isBusy(game) || game.frame % 2 === 0)) {
     const blitted = await $.ui.blit({ requestId: PANE, key: 'screen', cells: paint(game) })
     if (blitted.deny !== undefined) live.isMounted = false
   }
+  if (onDesktop && game.frame % DESKTOP_EVERY === 0) await update($, frame, n => n + 1)
 }
 
 export const register: Register = on => {
@@ -418,18 +432,38 @@ export const register: Register = on => {
     const lamps = await read($, hud)
     const ammo = Math.max(0, m.granted - m.tally.fired)
 
-    if (e.surface !== 'terminal') {
+    if (e.surface !== 'terminal' && e.surface !== 'desktop') {
       const { Text } = $.ui.resolve(e)
-      return <Text dimColor>PachinCode 的機台畫面只在終端機顯示。PachinPoints {m.points}</Text>
+      return <Text dimColor>PachinCode 的機台畫面只在終端機與桌面版顯示。PachinPoints {m.points}</Text>
     }
-    const { Box, Text, Raster, Button, Client } = $.ui.resolve(e)
     const turned = await read($, handle)
-    const cols = Math.max(32, Math.min(200, e.props.bodyColumns))
-    const rows = Math.max(16, Math.min(80, (e.viewport?.rows ?? 30) - 7))
-    if (game.geometry === null || game.geometry.cols !== cols || game.geometry.rows !== rows) {
-      game.geometry = buildGeometry(cols, rows)
+    let screen
+    if (e.surface === 'desktop') {
+      // No cell grid here: the machine is an image, redrawn on every bump of `frame`.
+      const { Svg } = $.ui.resolve(e)
+      await read($, frame)
+      live.desktopIdle = 0
+      if (game.geometry === null) game.geometry = buildGeometry(DESKTOP_COLS, DESKTOP_ROWS)
+      screen = <Svg key="screen" source={paintSvg(game)} alt="PachinCode 柏青哥機台" />
+    } else {
+      const { Box, Raster, Client } = $.ui.resolve(e)
+      const cols = Math.max(32, Math.min(200, e.props.bodyColumns))
+      const rows = Math.max(16, Math.min(80, (e.viewport?.rows ?? 30) - 7))
+      if (game.geometry === null || game.geometry.cols !== cols || game.geometry.rows !== rows) {
+        game.geometry = buildGeometry(cols, rows)
+      }
+      live.isMounted = true
+      screen = (
+        <Box width={cols} height={rows}>
+          <Raster key="screen" columns={cols} rows={rows} cells={paint(game)} />
+          {/* An invisible layer over the machine takes the mouse and Space. */}
+          <Box position="absolute" top={0} left={0}>
+            <Client key="pad" module="./surfaces/pad.tsx" props={{ columns: cols, rows }} width={cols} height={rows} />
+          </Box>
+        </Box>
+      )
     }
-    live.isMounted = true
+    const { Box, Text, Button } = $.ui.resolve(e)
     const isRight = turned.power >= 80
     const bar = '▰'.repeat(Math.round(turned.power / 10)) + '▱'.repeat(10 - Math.round(turned.power / 10))
     const holds = '●'.repeat(lamps.holds) + '○'.repeat(Math.max(0, 4 - lamps.holds))
@@ -442,13 +476,7 @@ export const register: Register = on => {
           </Text>
           <Text color="#9aa0a6">大當たり {m.tally.jackpots}</Text>
         </Box>
-        <Box width={cols} height={rows}>
-          <Raster key="screen" columns={cols} rows={rows} cells={paint(game)} />
-          {/* An invisible layer over the machine takes the mouse and Space. */}
-          <Box position="absolute" top={0} left={0}>
-            <Client key="pad" module="./surfaces/pad.tsx" props={{ columns: cols, rows }} width={cols} height={rows} />
-          </Box>
-        </Box>
+        {screen}
         <Text wrap="truncate">
           <Text color={turned.isAuto ? '#ffd700' : '#9aa0a6'} bold={turned.isAuto}>
             {turned.isAuto ? '◉ 自動發射中 ' : '○ 停止 '}
@@ -481,7 +509,9 @@ export const register: Register = on => {
         </Box>
         <Text wrap="truncate" color={lamps.message ? '#ffd700' : undefined} dimColor={!lamps.message}>
           {lamps.message ||
-            '在機台上按住滑鼠發射；點一下機台後 Space 發射、←→ 力道。也可以 ctrl+x tab 後按 S/F/A/D/L/R'}
+            (e.surface === 'desktop'
+              ? '按「自動發射」或「發射」打珠；力−／力＋調力道，左打／右打切換。'
+              : '在機台上按住滑鼠發射；點一下機台後 Space 發射、←→ 力道。也可以 ctrl+x tab 後按 S/F/A/D/L/R')}
         </Text>
       </Box>
     )
@@ -499,7 +529,7 @@ export const register: Register = on => {
         : m.isKakuhenNext && !e.props.isWorking
           ? { mode: 'next', text: '次回確変　下一個問題大當たり機率 ×10，繼續連莊！' }
           : undefined
-    if (glow === undefined || e.surface !== 'terminal') {
+    if (glow === undefined || (e.surface !== 'terminal' && e.surface !== 'desktop')) {
       return next(e)
     }
     const { Client } = $.ui.resolve(e)

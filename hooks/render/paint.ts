@@ -7,9 +7,12 @@ import { hex, hue, mix } from './color'
 import { paintLcd } from './lcd'
 import type { Prize } from './lcd'
 import { C } from './palette'
+import { encodePng } from './png'
 
-/** Paints the frame as Raster cells: `[codePoint, foreground, background]` per cell, base64. */
-export const paint = (game: Game): string => {
+type Word = { text: string; color: number }
+
+/** Composes the frame: one 0xRRGGBB per pixel, and the words to write over the LCD. */
+const compose = (game: Game) => {
   const g = game.geometry!
   const { width, height, lcd } = g
   const px = g.background.slice()
@@ -111,7 +114,7 @@ export const paint = (game: Game): string => {
   }
 
   // Words on the LCD's top row, as glyphs over the screen.
-  const words: { text: string; color: number }[] = []
+  const words: Word[] = []
   if (game.fever !== null && game.wrongStrike >= WARN_AFTER) {
     words.push({ text: 'RIGHT STRIKE!', color: frame % 6 < 3 ? C.reach : hex('#ffffff') })
   } else if (game.fever !== null) {
@@ -157,6 +160,17 @@ export const paint = (game: Game): string => {
     words.push({ text: line, color: hue((frame / 40) % 1, 0.65) })
   }
 
+  return { px, words }
+}
+
+/** Paints the frame as Raster cells: `[codePoint, foreground, background]` per cell, base64. */
+export const paint = (game: Game): string => {
+  const g = game.geometry!
+  const { width, lcd } = g
+  const { px, words } = compose(game)
+  const frame = game.frame
+  const reaching = isReaching(game.spin)
+
   // Half blocks: the top pixel is the glyph, the bottom one the background.
   const shift = reaching && frame % 2 === 0 ? 1 : 0
   const cells = new Uint32Array(g.cols * g.rows * 3)
@@ -200,4 +214,46 @@ export const toBase64 = (bytes: Uint8Array) => {
     text += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
   }
   return btoa(text)
+}
+
+/** The most pixels the desktop's image carries; a larger machine is drawn at a coarser step. */
+const SVG_PIXELS = 24000
+
+/**
+ * Paints the frame for the desktop, which has no cell grid: the pixels as an embedded
+ * PNG, scaled up crisp, and the LCD's words as SVG text over it.
+ */
+export const paintSvg = (game: Game, scale = 8): string => {
+  const g = game.geometry!
+  const { width, height, lcd } = g
+  const { px, words } = compose(game)
+  const stepBy = Math.max(1, Math.ceil(Math.sqrt((width * height) / SVG_PIXELS)))
+  const w = Math.ceil(width / stepBy)
+  const h = Math.ceil(height / stepBy)
+  const small = stepBy === 1 ? px : new Uint32Array(w * h)
+  if (stepBy > 1) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) small[y * w + x] = px[y * stepBy * width + x * stepBy]!
+    }
+  }
+  const png = toBase64(encodePng(small, w, h))
+  const css = (color: number) => `#${color.toString(16).padStart(6, '0')}`
+  const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const room = lcd.x1 - lcd.x0 - 2
+  const text = words
+    .map(
+      word =>
+        `<text x="${g.cx}" y="${lcd.y0 + 7}" fill="${css(word.color)}" font-family="monospace" font-weight="bold" ` +
+        `font-size="3" text-anchor="middle" textLength="${Math.min(room, word.text.length * 1.8)}" ` +
+        `lengthAdjust="spacingAndGlyphs" stroke="#000" stroke-width="0.4" paint-order="stroke">${escape(word.text)}</text>`,
+    )
+    .join('')
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width * scale}" height="${height * scale}">` +
+    `<image href="data:image/png;base64,${png}" x="0" y="0" width="${width}" height="${height}" ` +
+    `preserveAspectRatio="none" style="image-rendering:pixelated" />` +
+    text +
+    `</svg>`
+  )
 }

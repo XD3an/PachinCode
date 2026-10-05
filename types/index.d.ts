@@ -46,6 +46,8 @@ declare module 'claude-code' {
       handle: Handle
       /** Ids and opening text of the replies written during a fever, drawn gold. */
       gold: string[]
+      /** Bumped to redraw the machine on the desktop, which has no Raster to blit. */
+      frame: number
     }
   }
 }
